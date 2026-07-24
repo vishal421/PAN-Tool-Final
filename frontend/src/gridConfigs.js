@@ -173,33 +173,18 @@ export const GRID_CONFIGS = {
         key: 'nat_type', label: 'NAT Type', type: 'select', width: 150,
         options: ['static', 'dynamic-ip', 'dynamic-ip-and-port'], bulkEditable: true,
       },
-      {
-        key: 'translated_source', label: 'Translated Source', type: 'combo', width: 210,
-        dynamicOptionsKey: 'nat_interface_options',
-        placeholder: 'Pick "interface:<name>" for egress IP, or type a static IP/pool',
-      },
-      {
-        key: '_translated_source_ip', label: 'Interface IP (reference)', type: 'text', width: 160, readonly: true,
-        compute: (row, dynamicOptions) => {
-          const v = row.translated_source || ''
-          if (!v.startsWith('interface:')) return ''
-          const ifaceName = v.slice('interface:'.length)
-          return (dynamicOptions?.interface_ip_by_name || {})[ifaceName] || 'No IP on that interface yet - check Interface Mapping'
-        },
-      },
       // Direct egress-interface pick for interface-based source NAT (PAN-OS
       // "source-translation dynamic-ip-and-port interface-address interface
-      // ethernetX/Y"). Independent of the Translated Source combo above -
-      // selecting one here always resolves cleanly at export, no Interface
-      // Mapping step required.
+      // ethernetX/Y"). Selecting one here always resolves cleanly at
+      // export, no Interface Mapping step required.
       {
         key: 'egress_interface', label: 'Egress Interface', type: 'select', width: 160,
         options: Array.from({ length: 24 }, (_, i) => `ethernet1/${i + 1}`), allowBlank: true,
         bulkEditable: true, placeholder: 'Select ethernet1/1–24',
       },
       {
-        key: 'egress_interface_ip', label: 'Translated IP (reference)', type: 'text', width: 170,
-        placeholder: 'Optional - for reference only',
+        key: 'egress_interface_ip', label: 'Translated IP', type: 'text', width: 170,
+        placeholder: 'Translated IP',
       },
       { key: 'translated_dest', label: 'Translated Destination', type: 'text', width: 170 },
       { key: 'original_port', label: 'Original Port', type: 'text', width: 110 },
