@@ -1,0 +1,374 @@
+/* ---------- Breadcrumbs ---------- */
+.seo-breadcrumb-wrap {
+  padding-top: 18px;
+}
+.seo-breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-secondary, #9aa0ac);
+}
+.seo-breadcrumbs a {
+  color: var(--text-secondary, #9aa0ac);
+  text-decoration: none;
+}
+.seo-breadcrumbs a:hover {
+  color: var(--accent);
+}
+.seo-breadcrumbs li[aria-current='page'] {
+  color: var(--text-primary, #fff);
+  font-weight: 600;
+}
+
+/* ---------- Prose ---------- */
+.seo-prose {
+  max-width: 920px;
+}
+.seo-prose p {
+  color: var(--text-secondary, #9aa0ac);
+  line-height: 1.8;
+  margin-bottom: 22px;
+  font-size: 17px;
+}
+@media (max-width: 720px) {
+  .seo-prose p {
+    font-size: 16px;
+    line-height: 1.7;
+  }
+}
+
+/* ---------- Workflow diagram ---------- */
+.seo-workflow-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.seo-workflow-step {
+  width: 100%;
+  position: relative;
+  text-align: center;
+}
+.seo-workflow-connector {
+  color: var(--accent);
+  font-size: 20px;
+  margin: 6px 0 14px;
+}
+
+/* ---------- Comparison table ---------- */
+.seo-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.seo-comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 560px;
+}
+.seo-comparison-table th,
+.seo-comparison-table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-soft);
+}
+.seo-comparison-table thead th {
+  background: var(--bg-elevated);
+  color: var(--text-primary, #fff);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+.seo-comparison-table tbody th[scope='row'] {
+  color: var(--accent-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.seo-comparison-table td {
+  color: var(--text-secondary, #9aa0ac);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+}
+.seo-comparison-table tbody tr:last-child td,
+.seo-comparison-table tbody tr:last-child th {
+  border-bottom: none;
+}
+
+/* ---------- Checklist ---------- */
+.seo-checklist {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  max-width: none;
+}
+@media (max-width: 860px) {
+  .seo-checklist { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .seo-checklist { grid-template-columns: 1fr; }
+}
+.seo-checklist-item {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+}
+.seo-checklist-mark {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+.seo-checklist-item h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.seo-checklist-item p {
+  margin: 0;
+  color: var(--text-secondary, #9aa0ac);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+/* ---------- Related pages ---------- */
+.seo-related-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+@media (max-width: 860px) {
+  .seo-related-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .seo-related-grid { grid-template-columns: 1fr; }
+}
+.seo-related-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.seo-related-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.seo-related-vendor {
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+/* ================================================================
+   Sci-fi converter console
+   ================================================================ */
+.sf-console {
+  position: relative;
+  border-radius: 14px;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(20, 24, 34, 0.95), rgba(11, 13, 18, 0.98));
+  border: 1px solid rgba(255, 122, 26, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 122, 26, 0.08), 0 20px 60px rgba(0, 0, 0, 0.45), inset 0 0 40px rgba(255, 122, 26, 0.04);
+  overflow: hidden;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+.sf-console-glow {
+  position: absolute;
+  inset: -40% -20% auto -20%;
+  height: 220px;
+  background: radial-gradient(ellipse at center, rgba(255, 122, 26, 0.25), transparent 70%);
+  pointer-events: none;
+}
+.sf-console-scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 179, 92, 0.85), transparent);
+  animation: sf-scan linear infinite;
+  pointer-events: none;
+}
+@keyframes sf-scan {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.sf-console-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  position: relative;
+}
+.sf-console-dots {
+  display: flex;
+  gap: 5px;
+}
+.sf-console-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 122, 26, 0.5);
+}
+.sf-console-title {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--accent-2);
+  flex: 1;
+}
+.sf-console-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #6ee7a0;
+}
+.sf-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6ee7a0;
+  box-shadow: 0 0 8px #6ee7a0;
+  animation: sf-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sf-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+.sf-console-body {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 14px;
+  align-items: stretch;
+  position: relative;
+}
+.sf-console-col {
+  min-width: 0;
+}
+.sf-console-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 8px;
+}
+.sf-console-src,
+.sf-console-out {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 120px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.sf-console-out {
+  color: #ffd9a8;
+  border-color: rgba(255, 122, 26, 0.25);
+}
+.sf-dim {
+  color: rgba(255, 255, 255, 0.25);
+}
+.sf-console-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 16px;
+}
+.sf-arrow-track {
+  width: 4px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+.sf-arrow-fill {
+  width: 100%;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  transition: width 0.1s linear;
+  height: 100%;
+  transform-origin: bottom;
+}
+.sf-console-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.sf-stage-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.sf-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.sf-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.1s linear;
+}
+.sf-stage-count {
+  font-size: 11px;
+  color: var(--accent-2);
+  min-width: 34px;
+  text-align: right;
+}
+.sf-console-note {
+  margin-top: 10px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 720px) {
+  .sf-console-body {
+    grid-template-columns: 1fr;
+  }
+  .sf-console-arrow {
+    flex-direction: row;
+    height: auto;
+  }
+  .sf-arrow-track {
+    width: 80px;
+    height: 4px;
+    align-items: stretch;
+  }
+  .sf-arrow-fill {
+    height: 100%;
+    width: 0;
+  }
+}
