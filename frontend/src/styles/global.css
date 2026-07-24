@@ -212,9 +212,6 @@ button, a, input, select, .card, .sidebar-item, .stat-tile, .chip-btn, .tab-btn 
   .app-sidebar {
     display: flex;
   }
-  .app-shell {
-    margin-left: 63px;
-  }
 }
 
 .sidebar-nav-item span,
@@ -422,6 +419,17 @@ button, a, input, select, .card, .sidebar-item, .stat-tile, .chip-btn, .tab-btn 
 
 .app-shell.wide {
   padding: 19px clamp(12px, 2.5vw, 24px) 48px;
+}
+
+/* Placed after the base .app-shell rule (and its `margin: 0`) on purpose -
+   two rules with equal specificity resolve by source order, so this has
+   to come after that shorthand reset or it gets silently cancelled out
+   regardless of viewport width. This is what actually creates the fixed
+   gap between the collapsed sidebar and the page content. */
+@media (min-width: 900px) {
+  .app-shell {
+    margin-left: 63px;
+  }
 }
 
 @media (max-width: 640px) {
