@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+  <IPHost>
+    <Name>Server01</Name>
+    <HostType>IP</HostType>
+    <IPAddress>10.10.10.10</IPAddress>
+    <Description>Primary web server</Description>
+  </IPHost>
+  <IPHost>
+    <Name>Server02</Name>
+    <HostType>IP</HostType>
+    <IPAddress>10.10.10.20</IPAddress>
+  </IPHost>
+  <IPHost>
+    <Name>InternalNet</Name>
+    <HostType>Network</HostType>
+    <IPAddress>192.168.1.0</IPAddress>
+    <Netmask>255.255.255.0</Netmask>
+  </IPHost>
+  <IPHost>
+    <Name>DHCPRange1</Name>
+    <HostType>IPRange</HostType>
+    <StartIPAddress>10.20.0.10</StartIPAddress>
+    <EndIPAddress>10.20.0.50</EndIPAddress>
+  </IPHost>
+  <IPHost>
+    <Name>PublicDNS</Name>
+    <HostType>FQDNHost</HostType>
+    <FQDNHostName>dns.example.com</FQDNHostName>
+    <FQDNHostNameType>Exact</FQDNHostNameType>
+  </IPHost>
+
+  <IPHostGroup>
+    <Name>WebServers</Name>
+    <Description>All web tier hosts</Description>
+    <HostList>
+      <Host>Server01</Host>
+      <Host>Server02</Host>
+    </HostList>
+  </IPHostGroup>
+
+  <Services>
+    <Service>
+      <Name>HTTPS_8443</Name>
+      <Type>TCPorUDP</Type>
+      <ServiceDetails>
+        <ServiceDetail>
+          <Protocol>TCP</Protocol>
+          <DestinationPort>8443</DestinationPort>
+        </ServiceDetail>
+      </ServiceDetails>
+    </Service>
+    <Service>
+      <Name>DNS_UDP</Name>
+      <Type>TCPorUDP</Type>
+      <ServiceDetails>
+        <ServiceDetail>
+          <Protocol>UDP</Protocol>
+          <DestinationPort>53</DestinationPort>
+        </ServiceDetail>
+      </ServiceDetails>
+    </Service>
+    <Service>
+      <Name>PING</Name>
+      <Type>ICMP</Type>
+      <ServiceDetails>
+        <ServiceDetail>
+          <Protocol>ICMP</Protocol>
+          <ICMPType>8</ICMPType>
+        </ServiceDetail>
+      </ServiceDetails>
+    </Service>
+  </Services>
+
+  <ServiceGroup>
+    <Name>WebServices</Name>
+    <ServiceList>
+      <Service>HTTPS_8443</Service>
+      <Service>DNS_UDP</Service>
+    </ServiceList>
+  </ServiceGroup>
+
+  <Interface>
+    <Name>Port1</Name>
+    <IPAddress>192.168.1.1</IPAddress>
+    <Netmask>255.255.255.0</Netmask>
+    <Zone>LAN</Zone>
+    <MTU>1500</MTU>
+    <Description>Internal LAN</Description>
+  </Interface>
+  <Interface>
+    <Name>Port2</Name>
+    <IPAddress>203.0.113.1</IPAddress>
+    <Netmask>255.255.255.0</Netmask>
+    <Zone>WAN</Zone>
+    <MTU>1500</MTU>
+    <Description>ISP Uplink</Description>
+  </Interface>
+
+  <StaticRoute>
+    <Name>DefaultRoute</Name>
+    <Network>0.0.0.0</Network>
+    <Netmask>0.0.0.0</Netmask>
+    <Gateway>203.0.113.254</Gateway>
+    <Interface>Port2</Interface>
+  </StaticRoute>
+
+  <FirewallRule>
+    <Name>Allow_LAN_to_WebServers</Name>
+    <Status>Enable</Status>
+    <Action>Accept</Action>
+    <LogTraffic>Enable</LogTraffic>
+    <Description>LAN users to published web servers</Description>
+    <SourceZones><Zone>LAN</Zone></SourceZones>
+    <DestinationZones><Zone>WAN</Zone></DestinationZones>
+    <SourceNetworks><Network>InternalNet</Network></SourceNetworks>
+    <DestinationNetworks><Network>WebServers</Network></DestinationNetworks>
+    <Services><Service>WebServices</Service></Services>
+  </FirewallRule>
+  <FirewallRule>
+    <Name>Deny_All_Else</Name>
+    <Status>Enable</Status>
+    <Action>Drop</Action>
+    <LogTraffic>Disable</LogTraffic>
+    <SourceZones><Zone>Any</Zone></SourceZones>
+    <DestinationZones><Zone>Any</Zone></DestinationZones>
+    <SourceNetworks><Network>Any</Network></SourceNetworks>
+    <DestinationNetworks><Network>Any</Network></DestinationNetworks>
+    <Services><Service>Any</Service></Services>
+  </FirewallRule>
+
+  <NATRule>
+    <Name>SNAT_Internal_Out</Name>
+    <OriginalSourceNetworks><Network>InternalNet</Network></OriginalSourceNetworks>
+    <TranslatedSource>MASQ</TranslatedSource>
+    <OutboundInterfaces><Interface>Port2</Interface></OutboundInterfaces>
+  </NATRule>
+  <NATRule>
+    <Name>DNAT_WebServer</Name>
+    <OriginalSourceNetworks><Network>Any</Network></OriginalSourceNetworks>
+    <TranslatedDestination>Server01</TranslatedDestination>
+  </NATRule>
+</Configuration>

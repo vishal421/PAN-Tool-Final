@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BPA Report Generator</title>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  * { box-sizing: border-box; }
+  body {
+    /* Same palette/tokens as the main Firewall Config Converter tool - see
+       frontend/src/styles/global.css - so this feels like the same product
+       even though it runs as its own app on its own subdomain. */
+    --bg: oklch(0.99 0.004 75); --panel: oklch(1 0 0); --panel-2: oklch(0.96 0.006 70); --line: oklch(0.91 0.007 70);
+    --text: oklch(0.24 0.015 55); --muted: oklch(0.48 0.015 60); --navy: oklch(0.16 0.02 260);
+    --blue: oklch(0.66 0.19 38); --blue-dim: oklch(0.66 0.19 38 / 0.1);
+    --green: oklch(0.62 0.15 155); --green-dim: oklch(0.62 0.15 155 / 0.1);
+    --amber: oklch(0.75 0.15 75); --amber-dim: oklch(0.78 0.15 75 / 0.15);
+    --red: oklch(0.60 0.22 27); --red-dim: oklch(0.60 0.22 27 / 0.1);
+    --radius: 12px; --radius-sm: 8px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text); background: var(--bg);
+    margin: 0; padding: 0 0 60px; min-height: 100vh; line-height: 1.5;
+  }
+  .topbar {
+    /* Solid, non-blurred bar matching the main tool's merged header/sidebar
+       shell (see .app-header / .sidebar-brand in the main app) instead of
+       a separate dark floating card. */
+    background: oklch(0.995 0.003 75); color: var(--text); padding: 18px 20px;
+    margin-bottom: 32px; position: sticky; top: 0; z-index: 10;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 1px 2px oklch(0.2 0.015 60 / 0.05);
+  }
+  .topbar-inner { max-width: 920px; margin: 0 auto; display:flex; align-items:center; gap:14px; }
+  .mark {
+    width: 34px; height: 34px; border-radius: 8px;
+    /* Same gradient as the main tool's sidebar/app-title mark (--gradient-cyber). */
+    background: linear-gradient(135deg, oklch(0.66 0.19 38) 0%, oklch(0.72 0.17 55) 55%, oklch(0.60 0.22 27) 100%);
+    box-shadow: 0 8px 28px -8px oklch(0.66 0.19 38 / 0.35);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:13px; color: oklch(0.12 0.02 70);
+  }
+  .topbar-text .eyebrow { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; color: var(--muted); text-transform:uppercase; margin-bottom:3px; }
+  .topbar-text .title { font-family:'Space Grotesk','Inter',sans-serif; font-size:18px; font-weight:600; margin:0; color: var(--text); letter-spacing:-0.01em; }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 20px; }
+  .sub { color:var(--muted); font-size:14px; max-width:680px; margin: -14px 0 26px; }
+
+  .stage { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:14px; overflow:hidden; box-shadow: 0 1px 2px oklch(0.08 0.02 260 / 0.05); }
+  .stage-head { display:flex; align-items:center; gap:12px; padding:16px 18px; cursor:pointer; user-select:none; }
+  .num { font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; width:26px; height:26px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; background:var(--panel-2); color:var(--muted); border:1px solid var(--line); flex-shrink:0; }
+  .stage.active .num, .stage.done .num { background:var(--blue-dim); color:var(--blue); border-color: oklch(0.66 0.19 38 / 0.35); }
+  .stage.done .num { background:var(--green-dim); color:var(--green); border-color: oklch(0.58 0.15 155 / 0.35); }
+  .stage-title { font-weight:600; font-size:15px; flex:1; color:var(--text); font-family:'Space Grotesk','Inter',sans-serif; letter-spacing:-0.01em; }
+  .stage-status { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .stage.done .stage-status { color:var(--green); }
+  .stage.error .stage-status { color:var(--red); }
+  .chev { color:var(--muted); font-size:11px; transition:transform .15s; }
+  .stage.open .chev { transform:rotate(90deg); }
+  .body { padding:0 18px 20px; display:none; border-top: 1px solid var(--line); margin-top: 0; }
+  .stage.open .body { display:block; padding-top: 16px; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:11.5px; color:var(--muted); margin-bottom:5px; font-family:'JetBrains Mono',monospace; letter-spacing:.03em; }
+  .field input, .field select { width:100%; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm); padding:9px 11px; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:13px; }
+  .field input:focus, .field select:focus { outline:none; border-color:var(--blue); box-shadow: 0 0 0 3px var(--blue-dim); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .row .field { flex:1; min-width:180px; }
+  .filebox { border:1.5px dashed var(--line); border-radius:var(--radius-sm); padding:20px; text-align:center; cursor:pointer; font-size:13px; color:var(--muted); transition:border-color .15s,background .15s; background: var(--panel-2); }
+  .filebox:hover, .filebox.drag { border-color:var(--blue); background:var(--blue-dim); color:var(--text); }
+  .filebox b { color:var(--blue); }
+  .filename { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--blue); margin-top:8px; }
+  .btn { background: linear-gradient(135deg, oklch(0.66 0.19 38), oklch(0.74 0.17 55)); color: oklch(0.99 0.005 75); border:none; border-radius:var(--radius-sm); padding:11px 18px; font-weight:600; font-size:13.5px; cursor:pointer; font-family:'Inter',sans-serif; transition:all .15s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 8px 28px -8px oklch(0.66 0.19 38 / 0.35); }
+  .btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: 0 10px 32px -6px oklch(0.66 0.19 38 / 0.5); }
+  .btn:active { transform:scale(.98); }
+  .btn:disabled { background: var(--line); color:#fff; cursor:not-allowed; box-shadow:none; transform:none; }
+  .btn.secondary { background:transparent; border:1px solid var(--line); color:var(--text); }
+  .btn.secondary:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+  .btn.success { background:var(--green); }
+  .btn.success:hover { filter: brightness(1.08); }
+  .log { margin-top:12px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
+  .log .ok { color: var(--green); }
+  .log .err { color: var(--red); }
+  .console { background:var(--navy); border:1px solid oklch(1 0 0 / 0.08); border-radius:var(--radius); padding:16px; font-family:'JetBrains Mono',monospace; font-size:12.5px; color: oklch(0.85 0.02 250); max-height:420px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+  .console-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-family:'Inter',sans-serif; font-size:12px; color: oklch(0.65 0.02 250); }
+  .console .placeholder { color: oklch(0.55 0.02 250); font-style:italic; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:var(--radius-sm); font-size:11px; font-family:'JetBrains Mono',monospace; font-weight:600; }
+  .badge.completed { background:var(--green-dim); color:var(--green); }
+  .badge.failed { background:var(--red-dim); color:var(--red); }
+  .badge.pending { background:var(--amber-dim); color:var(--amber); }
+  .footer { text-align:center; margin-top:24px; font-size:11.5px; color: oklch(0.6 0.02 260); font-family:'JetBrains Mono',monospace; }
+
+  textarea.jsonpaste { width:100%; min-height:130px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 11px; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:12px; resize:vertical; }
+  textarea.jsonpaste:focus { outline:none; border-color:var(--blue); box-shadow: 0 0 0 3px var(--blue-dim); }
+  .tabbar { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .tabbtn { border:1px solid var(--line); background:var(--panel); color:var(--muted); padding:7px 14px; border-radius:var(--radius-sm); font-size:12.5px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; }
+  .tabbtn.active { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+  .srcpane { display:none; }
+  .srcpane.active { display:block; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; margin:14px 0 4px; font-size:12px; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .swatch { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .swatch.critical { background: oklch(0.62 0.2 25); }
+  .swatch.medium { background: oklch(0.78 0.16 80); }
+  .swatch.informational { background: oklch(0.65 0.15 235); }
+  .swatch.pass { background: oklch(0.66 0.16 155); }
+  .summarygrid { display:flex; gap:10px; flex-wrap:wrap; margin:14px 0; }
+  .sumcard { flex:1; min-width:100px; border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--line); }
+  .sumcard .n { font-size:22px; font-weight:800; font-family:'JetBrains Mono',monospace; }
+  .sumcard .l { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-top:2px; }
+  .sumcard.critical { background:var(--red-dim); } .sumcard.critical .n { color:var(--red); }
+  .sumcard.medium { background:var(--amber-dim); } .sumcard.medium .n { color:var(--amber); }
+  .sumcard.informational { background: oklch(0.72 0.16 240 / 0.1); } .sumcard.informational .n { color: oklch(0.58 0.16 240); }
+  .sumcard.pass { background:var(--green-dim); } .sumcard.pass .n { color:var(--green); }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="mark">BPA</div>
+    <div class="topbar-text">
+      <div class="eyebrow">Palo Alto Networks · API Integration</div>
+      <div class="title">BPA Report Generator</div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="sub">Generate a Best Practice Assessment report for your Panorama or NGFW configuration via the Palo Alto Networks Best Practice Assessment API.</div>
+
+  <!-- Stage 1 -->
+  <div class="stage open" id="stage1">
+    <div class="stage-head" onclick="toggle('stage1')">
+      <div class="num">1</div><div class="stage-title">Authenticate</div>
+      <div class="stage-status" id="s1status">pending</div><div class="chev">&#9656;</div>
+    </div>
+    <div class="body">
+      <div class="hint" style="color:var(--muted); font-size:13px; margin-bottom:12px;">The server authenticates with Palo Alto using the service account your administrator configured — no credentials to enter here.</div>
+      <button class="btn" onclick="getToken()">Generate Token</button>
+      <div class="log" id="log1">awaiting authentication…</div>
+    </div>
+  </div>
+
+  <!-- Stage 2 -->
+  <div class="stage" id="stage2">
+    <div class="stage-head" onclick="toggle('stage2')">
+      <div class="num">2</div><div class="stage-title">Upload configuration file</div>
+      <div class="stage-status" id="s2status">pending</div><div class="chev">&#9656;</div>
+    </div>
+    <div class="body">
+      <div class="field">
+        <label>DEVICE TYPE</label>
+        <select id="deviceType"><option value="panorama">panorama</option><option value="ngfw">ngfw</option></select>
+      </div>
+
+      <div class="field">
+        <label>FILE SOURCE</label>
+        <div class="row" style="gap:8px;">
+          <button type="button" class="btn secondary" id="srcLocalBtn" onclick="setSource('local')" style="flex:1; border-color:var(--blue); color:var(--blue); background:var(--blue-dim);">From my computer</button>
+          <button type="button" class="btn secondary" id="srcUrlBtn" onclick="setSource('url')" style="flex:1;">From a URL</button>
+        </div>
+      </div>
+
+      <div id="localSourceBox">
+        <div class="filebox" id="dropZone" onclick="document.getElementById('fileInput').click()">
+          <div>Drop your exported config XML here, or <b>click to browse</b></div>
+          <div style="font-size:11px;margin-top:4px;">The server prepares it and uploads it for you.</div>
+          <div class="filename" id="fileName"></div>
+        </div>
+        <input type="file" id="fileInput" accept=".xml" style="display:none">
+      </div>
+
+      <div id="urlSourceBox" style="display:none;">
+        <div class="field">
+          <label>CONFIG FILE URL</label>
+          <input type="text" id="fileUrl" placeholder="https://example.com/path/to/Configuration.xml">
+        </div>
+        <div class="log" style="margin-top:0; margin-bottom:12px;">Must be a direct, publicly reachable link to the raw XML (not a login page or a folder listing). The server downloads it, then forwards it to Palo Alto's presigned URL — same as the local-upload path.</div>
+      </div>
+
+      <div style="margin-top:10px;"><button class="btn" onclick="doUpload()">Initiate &amp; Upload</button></div>
+      <div class="log" id="log2">awaiting token…</div>
+    </div>
+  </div>
+
+  <!-- Stage 3 -->
+  <div class="stage" id="stage3">
+    <div class="stage-head" onclick="toggle('stage3')">
+      <div class="num">3</div><div class="stage-title">Generate BPA result</div>
+      <div class="stage-status" id="s3status">pending</div><div class="chev">&#9656;</div>
+    </div>
+    <div class="body">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn" onclick="poll()">Check Status</button>
+        <button class="btn success" id="downloadReportBtn" style="display:none;" onclick="downloadReport()">Download BPA Report</button>
+        <button class="btn secondary" id="downloadBtn" style="display:none;" onclick="downloadJson()">Download JSON</button>
+        <span id="pollBadge"></span>
+      </div>
+      <div class="console" style="margin-top:12px;">
+        <div class="console-head"><span>bpa-result.json</span></div>
+        <div class="placeholder" id="consoleContent">// waiting for report ID…</div>
+      </div>
+      <div id="consoleLinks"></div>
+    </div>
+  </div>
+
+  <!-- Stage 4 -->
+  <div class="stage" id="stage4">
+    <div class="stage-head" onclick="toggle('stage4')">
+      <div class="num">4</div><div class="stage-title">Convert BPA JSON to Excel</div>
+      <div class="stage-status" id="s4status">pending</div><div class="chev">&#9656;</div>
+    </div>
+    <div class="body">
+      <div class="tabbar">
+        <button type="button" class="tabbtn active" id="tabLastResult" onclick="setJsonSource('lastResult')">Use Step 3 result</button>
+        <button type="button" class="tabbtn" id="tabPaste" onclick="setJsonSource('paste')">Paste JSON</button>
+        <button type="button" class="tabbtn" id="tabFile" onclick="setJsonSource('file')">Upload .json file</button>
+        <button type="button" class="tabbtn" id="tabUrl" onclick="setJsonSource('url')">Fetch from URL</button>
+      </div>
+
+      <div class="srcpane active" id="paneLastResult">
+        <div class="log" style="margin-top:0;">Uses whatever came back from <b>Check Status</b> in Step 3. If you haven't polled yet, do that first — or use one of the other tabs.</div>
+      </div>
+      <div class="srcpane" id="panePaste">
+        <textarea class="jsonpaste" id="jsonPasteBox" placeholder="Paste the BPA JSON here…"></textarea>
+      </div>
+      <div class="srcpane" id="paneFile">
+        <div class="filebox" id="jsonDropZone" onclick="document.getElementById('jsonFileInput').click()">
+          <div>Drop a .json file here, or <b>click to browse</b></div>
+          <div class="filename" id="jsonFileName"></div>
+        </div>
+        <input type="file" id="jsonFileInput" accept=".json,application/json" style="display:none">
+      </div>
+      <div class="srcpane" id="paneUrl">
+        <div class="field">
+          <label>REPORT / CUSTOM CHECK URL</label>
+          <input type="text" id="jsonUrl" placeholder="https://…">
+        </div>
+        <div class="log" style="margin-top:0;">Fetched server-side to avoid browser CORS issues, same as the config-file URL option in Step 2.</div>
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn" onclick="convertToExcel()">Convert &amp; Download Excel</button>
+        <span id="convertBadge"></span>
+      </div>
+
+      <div class="legend">
+        <span><span class="swatch critical"></span>Critical</span>
+        <span><span class="swatch medium"></span>Medium</span>
+        <span><span class="swatch informational"></span>Informational</span>
+        <span><span class="swatch pass"></span>Pass</span>
+      </div>
+
+      <div id="summaryBox"></div>
+      <div class="log" id="log4">awaiting JSON…</div>
+    </div>
+  </div>
+
+  <div class="footer">PALO ALTO NETWORKS BEST PRACTICE ASSESSMENT API</div>
+</div>
+
+<script>
+const state = { token: null, reportId: null, uploadUrl: null, resultJson: null, reportUrl: null };
+let selectedFile = null;
+let fileSource = 'local';
+
+function setSource(mode){
+  fileSource = mode;
+  const localBtn = document.getElementById('srcLocalBtn');
+  const urlBtn = document.getElementById('srcUrlBtn');
+  const localBox = document.getElementById('localSourceBox');
+  const urlBox = document.getElementById('urlSourceBox');
+  if (mode === 'local'){
+    localBox.style.display = 'block'; urlBox.style.display = 'none';
+    localBtn.style.borderColor = 'var(--blue)'; localBtn.style.color = 'var(--blue)'; localBtn.style.background = 'var(--blue-dim)';
+    urlBtn.style.borderColor = 'var(--line)'; urlBtn.style.color = 'var(--text)'; urlBtn.style.background = 'transparent';
+  } else {
+    localBox.style.display = 'none'; urlBox.style.display = 'block';
+    urlBtn.style.borderColor = 'var(--blue)'; urlBtn.style.color = 'var(--blue)'; urlBtn.style.background = 'var(--blue-dim)';
+    localBtn.style.borderColor = 'var(--line)'; localBtn.style.color = 'var(--text)'; localBtn.style.background = 'transparent';
+  }
+}
+
+function toggle(id){ document.getElementById(id).classList.toggle('open'); }
+function setStatus(n, text, cls){
+  document.getElementById('s'+n+'status').textContent = text;
+  const p = document.getElementById('stage'+n);
+  p.classList.remove('done','error','active');
+  if (cls) p.classList.add(cls);
+}
+function log(n, msg, cls){
+  const el = document.getElementById('log'+n);
+  const line = document.createElement('div');
+  line.className = cls || '';
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog(n){ document.getElementById('log'+n).innerHTML = ''; }
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+function handleFile(f){ if(!f) return; selectedFile = f; document.getElementById('fileName').textContent = f.name + ' (' + Math.round(f.size/1024) + ' KB)'; }
+
+async function getToken(){
+  clearLog(1); setStatus(1,'requesting…','active');
+  try{
+    const resp = await fetch('/api/token', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({})
+    });
+    const data = await resp.json();
+    if (!resp.ok){ log(1,'Error: ' + (data.error || JSON.stringify(data)), 'err'); setStatus(1,'failed','error'); return; }
+    state.token = data.access_token;
+    log(1,'Token received (' + data.access_token.slice(0,18) + '…).','ok');
+    setStatus(1,'authenticated','done');
+    document.getElementById('stage1').classList.remove('open');
+    document.getElementById('stage2').classList.add('open');
+  }catch(err){
+    log(1,'Request failed: ' + err.message, 'err'); setStatus(1,'error','error');
+  }
+}
+
+async function doUpload(){
+  clearLog(2);
+  if (!state.token){ log(2,'Get a token in Step 1 first.','err'); return; }
+
+  const fileUrl = document.getElementById('fileUrl').value.trim();
+  if (fileSource === 'local' && !selectedFile){ log(2,'Choose a config XML file first.','err'); return; }
+  if (fileSource === 'url' && !fileUrl){ log(2,'Enter a config file URL first.','err'); return; }
+
+  setStatus(2,'initiating…','active');
+  const device_type = document.getElementById('deviceType').value;
+  try{
+    log(2,'Requesting upload URL…');
+    const initResp = await fetch('/api/initiate-upload', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: state.token, device_type })
+    });
+    const initData = await initResp.json();
+    if (!initResp.ok){ log(2,'Error: ' + JSON.stringify(initData.details || initData), 'err'); setStatus(2,'failed','error'); return; }
+
+    const uploadUrl = initData.upload_url || initData.uploadUrl || initData.url;
+    const reportId = initData.task_id || initData.id || initData.report_id || initData.reportId;
+    if (!uploadUrl || !reportId){ log(2,'Unexpected response: ' + JSON.stringify(initData), 'err'); setStatus(2,'unexpected response','error'); return; }
+    state.uploadUrl = uploadUrl; state.reportId = reportId;
+    log(2,'Got upload URL and report ID: ' + reportId, 'ok');
+
+    let putResp, putData;
+    if (fileSource === 'local'){
+      log(2,'Sending file for upload…');
+      const form = new FormData();
+      form.append('file', selectedFile);
+      form.append('upload_url', uploadUrl);
+      putResp = await fetch('/api/upload-file', { method:'POST', body: form });
+    } else {
+      log(2,'Fetching ' + fileUrl + ' and forwarding it…');
+      putResp = await fetch('/api/upload-from-url', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ file_url: fileUrl, upload_url: uploadUrl })
+      });
+    }
+    putData = await putResp.json();
+    if (!putResp.ok){ log(2,'Upload failed: ' + JSON.stringify(putData.details || putData), 'err'); setStatus(2,'upload failed','error'); return; }
+
+    log(2,'Upload complete' + (putData.bytes ? ' (' + Math.round(putData.bytes/1024) + ' KB)' : '') + '.','ok');
+    setStatus(2,'uploaded','done');
+    document.getElementById('stage2').classList.remove('open');
+    document.getElementById('stage3').classList.add('open');
+  }catch(err){
+    log(2,'Request failed: ' + err.message, 'err'); setStatus(2,'error','error');
+  }
+}
+
+async function poll(){
+  if (!state.token || !state.reportId){
+    document.getElementById('consoleContent').textContent = '// need a token + report ID from steps 1–2 first'; return;
+  }
+  setStatus(3,'checking…','active');
+  const badge = document.getElementById('pollBadge'); badge.innerHTML = '';
+  try{
+    const resp = await fetch('/api/status?token=' + encodeURIComponent(state.token) + '&id=' + encodeURIComponent(state.reportId));
+    const data = await resp.json();
+    document.getElementById('consoleContent').textContent = JSON.stringify(data, null, 2);
+    document.getElementById('consoleContent').classList.remove('placeholder');
+    state.resultJson = JSON.stringify(data, null, 2);
+
+    const status = data && data.status ? String(data.status).toUpperCase() : null;
+    if (status === 'COMPLETED'){
+      badge.innerHTML = '<span class="badge completed">COMPLETED</span>';
+      setStatus(3,'completed','done');
+      document.getElementById('downloadBtn').style.display='inline-block';
+      renderResultLinks(data.result);
+    }
+    else if (status === 'FAILED'){ badge.innerHTML = '<span class="badge failed">FAILED</span>'; setStatus(3,'failed','error'); }
+    else if (status){ badge.innerHTML = '<span class="badge pending">'+status+'</span>'; setStatus(3, status.toLowerCase()+' — retry in ~30s','active'); }
+    else { setStatus(3,'unrecognized response','error'); }
+  }catch(err){
+    document.getElementById('consoleContent').textContent = 'Request failed: ' + err.message;
+    setStatus(3,'error','error');
+  }
+}
+
+function renderResultLinks(result){
+  const btn = document.getElementById('downloadReportBtn');
+  const box = document.getElementById('consoleLinks');
+  if (!result){ box.innerHTML = ''; btn.style.display = 'none'; return; }
+
+  if (result.report_url){
+    state.reportUrl = result.report_url;
+    btn.style.display = 'inline-block';
+  } else {
+    state.reportUrl = null;
+    btn.style.display = 'none';
+    box.innerHTML = '<div style="font-size:12px;color:var(--red);margin-top:8px;">report_url is empty — main report not returned yet, try polling again in a bit</div>';
+  }
+
+  if (result.custom_check_url){
+    box.innerHTML = '<div style="margin-top:10px;"><a href="'+result.custom_check_url+'" target="_blank" rel="noopener" class="btn secondary" style="text-decoration:none;display:inline-block;">Download custom checks (JSON)</a></div>';
+  }
+}
+
+function downloadReport(){
+  if (!state.reportUrl) return;
+  window.location.href = state.reportUrl;
+}
+
+function downloadJson(){
+  if (!state.resultJson) return;
+  const blob = new Blob([state.resultJson], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bpa-result-' + (state.reportId || 'report') + '.json';
+  a.click();
+}
+
+/* ===================== Stage 4: JSON → Excel ===================== */
+
+let jsonSource = 'lastResult';
+let selectedJsonFile = null;
+
+function setJsonSource(mode){
+  jsonSource = mode;
+  ['lastResult','paste','file','url'].forEach(m => {
+    document.getElementById('tab' + m[0].toUpperCase() + m.slice(1)).classList.toggle('active', m === mode);
+    document.getElementById('pane' + m[0].toUpperCase() + m.slice(1)).classList.toggle('active', m === mode);
+  });
+}
+
+const jsonDropZone = document.getElementById('jsonDropZone');
+const jsonFileInput = document.getElementById('jsonFileInput');
+jsonFileInput.addEventListener('change', e => handleJsonFile(e.target.files[0]));
+jsonDropZone.addEventListener('dragover', e => { e.preventDefault(); jsonDropZone.classList.add('drag'); });
+jsonDropZone.addEventListener('dragleave', () => jsonDropZone.classList.remove('drag'));
+jsonDropZone.addEventListener('drop', e => { e.preventDefault(); jsonDropZone.classList.remove('drag'); if (e.dataTransfer.files[0]) handleJsonFile(e.dataTransfer.files[0]); });
+function handleJsonFile(f){ if(!f) return; selectedJsonFile = f; document.getElementById('jsonFileName').textContent = f.name + ' (' + Math.round(f.size/1024) + ' KB)'; }
+
+function log4(msg, cls){
+  const el = document.getElementById('log4');
+  const line = document.createElement('div');
+  line.className = cls || '';
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog4(){ document.getElementById('log4').innerHTML = ''; }
+
+async function getJsonToConvert(){
+  if (jsonSource === 'lastResult'){
+    if (!state.resultJson) throw new Error('No result yet from Step 3 — poll for status there first, or switch tabs.');
+    return JSON.parse(state.resultJson);
+  }
+  if (jsonSource === 'paste'){
+    const raw = document.getElementById('jsonPasteBox').value.trim();
+    if (!raw) throw new Error('Paste some JSON first.');
+    return JSON.parse(raw);
+  }
+  if (jsonSource === 'file'){
+    if (!selectedJsonFile) throw new Error('Choose a .json file first.');
+    const text = await selectedJsonFile.text();
+    return JSON.parse(text);
+  }
+  if (jsonSource === 'url'){
+    const url = document.getElementById('jsonUrl').value.trim();
+    if (!url) throw new Error('Enter a URL first.');
+    const resp = await fetch('/api/fetch-json', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error ? (data.error + (data.details ? ': ' + JSON.stringify(data.details) : '')) : 'Fetch failed');
+    return data;
+  }
+}
+
+// ===== Primary extractor: the official Palo Alto BPA JSON schema =====
+// A genuine BPA finding is an object that carries BOTH check_name and
+// check_passed. That pairing is specific enough that it never collides with
+// ordinary PAN-OS configuration fields — e.g. an Anti-Spyware profile's
+// internal rule list also has "name" and "severity" keys, but never
+// "check_passed", so it's correctly ignored.
+function isBpaCheck(node){
+  return !!(node && typeof node === 'object' && !Array.isArray(node) &&
+    Object.prototype.hasOwnProperty.call(node, 'check_name') &&
+    Object.prototype.hasOwnProperty.call(node, 'check_passed'));
+}
+
+// check_type carries the real severity for a FAILED check: Critical / High / Warning / Informational.
+// A PASSED check (check_passed true) is always green, regardless of check_type.
+function classifyBpaCheck(node){
+  if (node.check_passed === true || String(node.check_passed).toLowerCase() === 'true') return 'pass';
+  const t = String(node.check_type || '').toLowerCase();
+  if (t.includes('critical') || t.includes('high')) return 'critical';
+  if (t.includes('warn')) return 'medium';
+  if (t.includes('informational')) return 'informational';
+  return null;
+}
+
+// Normalizes check_type into one clean severity label — independent of pass/fail.
+// PAN-OS reports "Warning" for what the person wants labeled "Medium".
+function normalizeSeverityLabel(checkType){
+  const t = String(checkType || '').toLowerCase();
+  if (t.includes('critical')) return 'Critical';
+  if (t.includes('high')) return 'High';
+  if (t.includes('warn')) return 'Medium';
+  if (t.includes('informational')) return 'Informational';
+  return checkType || '';
+}
+function isPassed(node){
+  return node.check_passed === true || String(node.check_passed).toLowerCase() === 'true';
+}
+
+// The same check runs once per config object (per zone, per security rule, per
+// certificate, per auth profile...). Many objects share a check name, so without
+// knowing WHICH object a row is about, a passing WAN zone and a failing DMZ zone
+// look like a contradictory duplicate. Pull the object's own name/identifier out
+// of its sibling "configuration" block so every row is traceable to one object.
+const OBJECT_NAME_KEYS = ['name', 'rule_name', 'hostname', 'common_name', 'subject', 'host'];
+function extractInstanceName(config){
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return '';
+  for (const k of OBJECT_NAME_KEYS){
+    const v = config[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+function collectBpaChecks(node, path, out, instanceName){
+  if (Array.isArray(node)){
+    node.forEach(child => collectBpaChecks(child, path, out, instanceName));
+    return;
+  }
+  if (node && typeof node === 'object'){
+    if (isBpaCheck(node)){
+      const extras = {};
+      ['check_id', 'check_excluded', 'defined_by', 'uuid'].forEach(k => {
+        const v = node[k];
+        if (v !== null && v !== undefined && v !== '') extras[k] = v;
+      });
+      out.push({
+        category: path.filter(p => p !== 'best_practices' && p !== 'warnings').join(' > '),
+        object: instanceName || '',
+        name: node.check_name || '',
+        description: node.check_message || '',
+        severity: normalizeSeverityLabel(node.check_type),
+        passed: isPassed(node),
+        bucket: classifyBpaCheck(node),
+        extras
+      });
+      return; // don't descend into a matched check (e.g. skip its failed_fields payload)
+    }
+    // An "instance" wrapper ({configuration, warnings, ...}) tells us which
+    // specific object the upcoming warnings belong to — remember its name.
+    let nextInstanceName = instanceName;
+    if (node.configuration && typeof node.configuration === 'object' && !Array.isArray(node.configuration)){
+      const nm = extractInstanceName(node.configuration);
+      if (nm) nextInstanceName = nm;
+    }
+    for (const k of Object.keys(node)){
+      collectBpaChecks(node[k], [...path, k], out, nextInstanceName);
+    }
+  }
+}
+
+
+// ===== Fallback extractor: generic heuristic for JSON not in the PANW BPA shape =====
+const NAME_KEYS = ['name','title','best_practice','practice_name','item','check','check_title'];
+const DESC_KEYS = ['description','details','summary','check_description','recommendation_description','recommendation'];
+const SEVERITY_KEYS = ['severity','criticality','risk','level','priority'];
+const STATUS_KEYS = ['status','result','check_result','category_result','pass_fail','compliance','state','outcome'];
+const CATEGORY_KEYS = ['category','section','group','area','feature'];
+const SKIP_KEYS = new Set([...NAME_KEYS, ...DESC_KEYS, ...SEVERITY_KEYS, ...STATUS_KEYS, ...CATEGORY_KEYS]);
+
+function firstMatch(obj, keys){
+  for (const k of keys){ if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return { key:k, value: obj[k] }; }
+  return null;
+}
+function looksLikeCheck(item){
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const hasName = firstMatch(item, NAME_KEYS);
+  const hasSevOrStatus = firstMatch(item, SEVERITY_KEYS) || firstMatch(item, STATUS_KEYS);
+  return !!(hasName && hasSevOrStatus);
+}
+function classify(item){
+  const statusMatch = firstMatch(item, STATUS_KEYS);
+  const sevMatch = firstMatch(item, SEVERITY_KEYS);
+  const passWords = ['pass','passed','ok','compliant','good','yes','true','met','satisfied'];
+  const failWords = ['fail','failed','no','false','not met','non-compliant','noncompliant'];
+  if (statusMatch){
+    const s = String(statusMatch.value).toLowerCase();
+    if (passWords.some(w => s.includes(w))) return 'pass';
+    if (!failWords.some(w => s.includes(w))) {
+      const direct = classifyWord(s);
+      if (direct) return direct;
+    }
+  }
+  if (sevMatch){
+    const direct = classifyWord(String(sevMatch.value).toLowerCase());
+    if (direct) return direct;
+  }
+  if (statusMatch){
+    const s = String(statusMatch.value).toLowerCase();
+    if (failWords.some(w => s.includes(w))) return 'medium';
+  }
+  return null;
+}
+function classifyWord(s){
+  if (s.includes('critical') || s.includes('high')) return 'critical';
+  if (s.includes('medium') || s.includes('warn')) return 'medium';
+  if (s.includes('informational') || s.includes('info') || s.includes('low')) return 'informational';
+  if (s.includes('pass') || s.includes('ok') || s.includes('compliant') || s.includes('good')) return 'pass';
+  return null;
+}
+function genericExtractRows(root){
+  const rows = [];
+  const extraKeySet = new Set();
+  function walk(node, path){
+    if (Array.isArray(node)){
+      if (node.length && node.every(looksLikeCheck)){
+        for (const item of node){
+          const nameMatch = firstMatch(item, NAME_KEYS);
+          const descMatch = firstMatch(item, DESC_KEYS);
+          const catMatch = firstMatch(item, CATEGORY_KEYS);
+          const statusMatch = firstMatch(item, STATUS_KEYS);
+          const sevMatch = firstMatch(item, SEVERITY_KEYS);
+          const bucket = classify(item);
+          const extras = {};
+          for (const k of Object.keys(item)){
+            if (SKIP_KEYS.has(k)) continue;
+            const v = item[k];
+            if (v === null || v === undefined || v === '') continue;
+            if (typeof v === 'object') continue;
+            extras[k] = v;
+            extraKeySet.add(k);
+          }
+          const rawText = (sevMatch ? String(sevMatch.value) : '') || (statusMatch ? String(statusMatch.value) : '');
+          rows.push({
+            category: catMatch ? String(catMatch.value) : path.join(' > '),
+            object: '',
+            name: nameMatch ? String(nameMatch.value) : '',
+            description: descMatch ? String(descMatch.value) : '',
+            severity: bucket === 'pass' ? (normalizeSeverityLabel(rawText) || 'Informational') : (normalizeSeverityLabel(rawText) || rawText),
+            passed: bucket === 'pass',
+            bucket: bucket,
+            extras
+          });
+        }
+        return;
+      }
+      node.forEach(child => walk(child, path));
+      return;
+    }
+    if (node && typeof node === 'object'){
+      for (const k of Object.keys(node)){
+        walk(node[k], [...path, k]);
+      }
+    }
+  }
+  walk(root, []);
+  return { rows, extraKeys: Array.from(extraKeySet).slice(0, 6) };
+}
+
+// Tries the strict Palo Alto BPA schema first; only falls back to the generic
+// heuristic when the JSON isn't shaped like an official BPA report at all.
+function extractRows(root){
+  const strict = [];
+  collectBpaChecks(root, [], strict, '');
+  if (strict.length){
+    const extraKeySet = new Set();
+    strict.forEach(r => Object.keys(r.extras).forEach(k => extraKeySet.add(k)));
+    return { rows: strict, extraKeys: Array.from(extraKeySet).slice(0, 6) };
+  }
+  return genericExtractRows(root);
+}
+
+const BUCKET_FILL = {
+  critical: 'FFF9D6D3',
+  medium:   'FFFCEFC7',
+  informational: 'FFDCE9FB',
+  pass:     'FFDCF3E6'
+};
+const BUCKET_FONT = {
+  critical: 'FFB0332B',
+  medium:   'FF8E5C0A',
+  informational: 'FF1E4FA3',
+  pass:     'FF176B45'
+};
+const BUCKET_LABEL = { critical:'Critical', medium:'Medium', informational:'Informational', pass:'Pass' };
+
+async function convertToExcel(){
+  clearLog4();
+  document.getElementById('summaryBox').innerHTML = '';
+  const badge = document.getElementById('convertBadge'); badge.innerHTML = '';
+  setStatus(4, 'working…', 'active');
+
+  try{
+    log4('Reading JSON…');
+    const data = await getJsonToConvert();
+
+    log4('Scanning for best-practice check entries…');
+    const { rows, extraKeys } = extractRows(data);
+
+    if (!rows.length){
+      log4('No check-style entries were auto-detected in this JSON (looked for objects with a name + severity/status field).', 'err');
+      setStatus(4, 'nothing to convert', 'error');
+      return;
+    }
+
+    const counts = { critical:0, medium:0, informational:0, pass:0, unclassified:0 };
+    rows.forEach(r => { counts[r.bucket || 'unclassified']++; });
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'BPA Report Generator';
+    wb.created = new Date();
+
+    // ---- Findings sheet ----
+    const ws = wb.addWorksheet('BPA Findings');
+    const baseCols = [
+      { header:'Category', key:'category', width:22 },
+      { header:'Object', key:'object', width:20 },
+      { header:'Check', key:'name', width:44 },
+      { header:'Description', key:'description', width:60 },
+      { header:'Severity', key:'severity', width:16 },
+      { header:'Rating', key:'rating', width:12 },
+    ];
+    const extraCols = extraKeys.map(k => ({ header: k, key: k, width: 22 }));
+    ws.columns = [...baseCols, ...extraCols];
+    ws.getRow(1).font = { bold:true, color:{argb:'FFFFFFFF'} };
+    ws.getRow(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF10233F'} };
+    ws.getRow(1).height = 20;
+    ws.views = [{ state:'frozen', ySplit:1 }];
+
+    rows.forEach(r => {
+      const rowData = {
+        category: r.category,
+        object: r.object || '',
+        name: r.name,
+        description: r.description,
+        severity: r.severity || '',
+        rating: r.passed ? 'Pass' : 'Fail',
+      };
+      extraKeys.forEach(k => { rowData[k] = r.extras[k] !== undefined ? String(r.extras[k]) : ''; });
+      const row = ws.addRow(rowData);
+      row.alignment = { vertical:'top', wrapText:true };
+      if (r.bucket && BUCKET_FILL[r.bucket]){
+        row.eachCell(cell => {
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: BUCKET_FILL[r.bucket]} };
+        });
+        const ratingCell = row.getCell('rating');
+        ratingCell.font = { bold:true, color:{argb: BUCKET_FONT[r.bucket]} };
+      }
+    });
+    ws.autoFilter = { from:'A1', to: String.fromCharCode(65 + baseCols.length + extraCols.length - 1) + '1' };
+
+    // ---- Summary sheet ----
+    const sw = wb.addWorksheet('Summary');
+    sw.columns = [{ header:'Result', key:'rating', width:20 }, { header:'Count', key:'count', width:12 }];
+    sw.getRow(1).font = { bold:true, color:{argb:'FFFFFFFF'} };
+    sw.getRow(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF10233F'} };
+    [['critical','Critical'],['medium','Medium'],['informational','Informational'],['pass','Pass']].forEach(([b,label]) => {
+      const row = sw.addRow({ rating: label, count: counts[b] });
+      row.eachCell(cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: BUCKET_FILL[b]} }; });
+      row.getCell('rating').font = { bold:true, color:{argb: BUCKET_FONT[b]} };
+    });
+    if (counts.unclassified) sw.addRow({ rating:'Unclassified', count: counts.unclassified });
+    sw.addRow({});
+    sw.addRow({ rating:'Total', count: rows.length }).font = { bold:true };
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'bpa-report-' + (state.reportId || 'export') + '.xlsx';
+    a.click();
+
+    log4('Generated ' + rows.length + ' rows across ' + (extraKeys.length ? (extraKeys.length + ' extra columns, ') : '') + '2 sheets.', 'ok');
+    badge.innerHTML = '<span class="badge completed">DOWNLOADED</span>';
+    setStatus(4, 'done', 'done');
+
+    document.getElementById('summaryBox').innerHTML =
+      '<div class="summarygrid">' +
+      ['critical','medium','informational','pass'].map(b =>
+        '<div class="sumcard ' + b + '"><div class="n">' + counts[b] + '</div><div class="l">' + BUCKET_LABEL[b] + '</div></div>'
+      ).join('') + '</div>';
+
+  }catch(err){
+    log4('Error: ' + err.message, 'err');
+    setStatus(4, 'error', 'error');
+  }
+}
+</script>
+</body>
+</html>

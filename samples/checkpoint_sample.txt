@@ -1,0 +1,33 @@
+# Sample Check Point configuration for converter testing
+# Combines mgmt_cli (security policy database) and Gaia clish (gateway OS) exports
+
+add host name "Server01" ip-address "10.10.10.10" comments "Primary web server"
+add host name "Server02" ip-address "10.10.10.20"
+add network name "InternalNet" subnet "192.168.1.0" mask-length "24"
+add address-range name "DHCPRange1" ip-address-first "10.20.0.10" ip-address-last "10.20.0.50"
+add dns-domain name "PublicDNS" domain "dns.example.com"
+
+add group name "WebServers" members "Server01,Server02" comments "All web tier hosts"
+
+add service-tcp name "HTTPS_8443" port "8443" comments "Custom HTTPS port"
+add service-udp name "DNS_UDP" port "53"
+add service-icmp name "PING" icmp-type "8"
+
+add service-group name "WebServices" members "HTTPS_8443,DNS_UDP"
+
+set interface eth0 ipv4-address 192.168.1.1 mask-length 24
+set interface eth0 comments "Internal LAN"
+set interface eth0 mtu 1500
+set interface eth0 security-zone "Internal"
+set interface eth1 ipv4-address 203.0.113.1 mask-length 24
+set interface eth1 comments "ISP Uplink"
+set interface eth1 mtu 1500
+set interface eth1 security-zone "External"
+
+set static-route 0.0.0.0/0 nexthop gateway address 203.0.113.254 priority 1
+
+add access-rule layer "Network" name "Allow_LAN_to_WebServers" source "InternalNet" destination "WebServers" service "WebServices" action "Accept" track "Log" comments "LAN users to published web servers" position "top"
+add access-rule layer "Network" name "Deny_All_Else" source "Any" destination "Any" service "Any" action "Drop" track "Log" position "bottom"
+
+add nat-rule original-source "InternalNet" original-destination "Any" method "hide" hide-behind "gateway" position "top"
+add nat-rule original-source "Server01" method "static" translated-source "203.0.113.10" position "top"

@@ -1,0 +1,65 @@
+services:
+  - type: web
+    name: fwconverter-backend
+    runtime: docker
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO   # replace with your repo URL
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter          # SQLite + persistent disk needs a paid instance type, not "free"
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////app/storage/converter.db
+      - key: MAX_UPLOAD_MB
+        value: "25"
+      - key: CORS_ORIGINS
+        value: https://fwconverter-frontend.onrender.com   # update after frontend is created
+      # Auth secrets/config - set actual values as secrets in the Render
+      # dashboard rather than committing them here. See .env.example for
+      # the full list (JWT_SECRET, BREVO_API_KEY or BREVO_SMTP_*, etc).
+      - key: JWT_SECRET
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Firewall Config Converter
+      - key: MAIL_FROM_ADDRESS
+        value: no-reply@example.com
+    disk:
+      name: fwconverter-storage
+      mountPath: /app/storage
+      sizeGB: 1
+
+  - type: web
+    name: fwconverter-frontend
+    runtime: static
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO   # replace with your repo URL
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://fwconverter-backend.onrender.com/api   # update after backend is created
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  # Fully separate app on its own subdomain (e.g. bpa.yourdomain.com) - own
+  # server, own Palo Alto SCM API auth flow entered directly in its UI, no
+  # shared session/login with the main app above.
+  - type: web
+    name: bpa-report-generator
+    runtime: docker
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO   # replace with your repo URL
+    dockerfilePath: ./bpa-tool/Dockerfile
+    dockerContext: ./bpa-tool
+    plan: starter
+    envVars:
+      - key: PORT
+        value: "4021"
+      - key: CLIENT_ID
+        sync: false
+      - key: CLIENT_SECRET
+        sync: false
+      - key: TSG_ID
+        sync: false

@@ -1,0 +1,167 @@
+# Sizing this is set up for: ~20 concurrent users converting large firewall
+# configs on a single host with a 500GB SSD.
+#
+#   - db:       Postgres, replaces SQLite. SQLite serializes all writes,
+#               which becomes the bottleneck once >1 user is active at the
+#               same time (every pageview/session/job is a write). Postgres
+#               handles 20 concurrent users comfortably on 2 vCPU / 4GB RAM.
+#   - backend:  Gunicorn + Uvicorn workers (see backend/Dockerfile) instead
+#               of a single process, so multiple users' parse/convert jobs
+#               run in true parallel. WEB_CONCURRENCY below defaults to 4 -
+#               raise it if your host has more than ~1-2 CPU cores free.
+#   - storage:  bind-mounted onto your 500GB SSD explicitly (see the
+#               STORAGE_PATH / POSTGRES_DATA_PATH vars) rather than an
+#               anonymous Docker volume, so you can see/back up the data
+#               directly and aren't relying on wherever Docker happens to
+#               put its volume store.
+#
+# Quick start:
+#   1. cp .env.example .env   (create one if you don't have it) and set
+#      POSTGRES_PASSWORD and JWT_SECRET to real random values:
+#        python3 -c "import secrets; print(secrets.token_hex(32))"
+#   2. docker compose up -d --build
+#
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fwconverter-db
+    environment:
+      - POSTGRES_DB=fwconverter
+      - POSTGRES_USER=fwconverter
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in your .env}
+    volumes:
+      # Bind-mounted to a real path on your SSD so the DB's data files are
+      # easy to locate/back up. Change the left-hand side if you want it
+      # somewhere other than ./data/postgres relative to this file.
+      - ${POSTGRES_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fwconverter -d fwconverter"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # Modest resource ceiling for a Postgres instance serving ~20 users.
+    # Remove/raise this if you outgrow it.
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
+  backend:
+    build:
+      context: ./backend
+    container_name: fwconverter-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Uploaded configs + generated CLI/report artifacts - also bind-mounted
+      # onto the SSD (not an anonymous volume) so they're easy to inspect,
+      # back up, or wipe independently of Docker's storage driver.
+      - ${STORAGE_PATH:-./data/backend-storage}:/app/storage
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://fwconverter:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in your .env}@db:5432/fwconverter
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:4757}
+      # Set to ".yourdomain.com" (leading dot) if serving login/signup/dash
+      # as separate subdomains, so the session cookie is shared across them.
+      # Leave unset for a single-origin deployment.
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      # Safe to leave true behind Cloudflare Tunnel specifically, since the
+      # tunnel means this origin has no public inbound port at all - see
+      # the comment on client_ip() in app/auth/core.py before changing this.
+      - TRUST_CLOUDFLARE_IP=${TRUST_CLOUDFLARE_IP:-true}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-100}
+      # Gunicorn worker *processes* - each handles requests (incl. config
+      # parsing) independently, so this is your real concurrency knob.
+      # Rule of thumb: (CPU cores x 2) + 1, capped around 8-12 for this
+      # app's workload. 4 is a safe default for a 4-vCPU box.
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+      # REQUIRED for real deployments - generate with:
+      #   python3 -c "import secrets; print(secrets.token_hex(32))"
+      # and put it in a .env file (not committed) or your host's secrets
+      # manager. If unset, the app falls back to an insecure dev default
+      # and logs a warning on startup.
+      - JWT_SECRET=${JWT_SECRET:-}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-10080}
+      - FREE_PLAN_JOB_LIMIT=${FREE_PLAN_JOB_LIMIT:-10}
+      - ADMIN_BOOTSTRAP_EMAILS=${ADMIN_BOOTSTRAP_EMAILS:-}
+      - GEOIP_PROVIDER=${GEOIP_PROVIDER:-ip-api}
+      # --- Brevo (transactional email for OTP verification + password reset) ---
+      # Preferred: set BREVO_API_KEY (uses Brevo's HTTP API). Alternatively,
+      # set the BREVO_SMTP_* vars to use Brevo's SMTP relay instead. If
+      # neither is set, OTP emails are skipped and a warning is logged -
+      # the app still runs, but nobody can complete signup/reset.
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
+      - BREVO_SMTP_HOST=${BREVO_SMTP_HOST:-}
+      - BREVO_SMTP_PORT=${BREVO_SMTP_PORT:-587}
+      - BREVO_SMTP_USERNAME=${BREVO_SMTP_USERNAME:-}
+      - BREVO_SMTP_PASSWORD=${BREVO_SMTP_PASSWORD:-}
+      - MAIL_FROM_NAME=${MAIL_FROM_NAME:-Firewall Config Converter}
+      - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-no-reply@example.com}
+      # --- OTP security tuning (safe defaults - see backend/app/core/config.py) ---
+      - OTP_EXPIRE_MINUTES=${OTP_EXPIRE_MINUTES:-5}
+      - OTP_MAX_ATTEMPTS=${OTP_MAX_ATTEMPTS:-5}
+      - OTP_RESEND_COOLDOWN_SECONDS=${OTP_RESEND_COOLDOWN_SECONDS:-60}
+      - OTP_MAX_REQUESTS_PER_HOUR=${OTP_MAX_REQUESTS_PER_HOUR:-5}
+      # Comma-separated extra domains to reject at signup, beyond the
+      # built-in free/disposable list in backend/app/auth/domains.py.
+      - EXTRA_BLOCKED_EMAIL_DOMAINS=${EXTRA_BLOCKED_EMAIL_DOMAINS:-}
+    restart: unless-stopped
+    # Backend does the CPU/RAM-heavy work (parsing, generation, Excel
+    # exports). This ceiling comfortably covers 20 users on heavy configs;
+    # raise memory further if your configs are unusually large.
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 12G
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the built JS at build time (Vite requirement - this
+        # can't be a plain runtime env var). Set ROOT_DOMAIN in .env to your
+        # domain (e.g. pan-tool.com) to enable the login./signup./dash.
+        # subdomain routing; leave unset for a single-origin deployment.
+        VITE_ROOT_DOMAIN: ${ROOT_DOMAIN:-}
+    container_name: fwconverter-frontend
+    ports:
+      - "4757:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    # Static file serving via nginx - negligible resource needs.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+
+  bpa-tool:
+    build:
+      context: ./bpa-tool
+    container_name: fwconverter-bpa
+    ports:
+      - "4021:4021"
+    restart: unless-stopped
+    # Fully separate from the main app: its own server, its own auth.
+    # Auth is now fully backend-driven - the Prisma Access service account
+    # (CLIENT_ID/CLIENT_SECRET/TSG_ID) lives only in this container's
+    # environment, never in its UI, and never touches this app's
+    # login/session system. Point bpa.<yourdomain> at this service/port.
+    environment:
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      TSG_ID: ${TSG_ID}
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
