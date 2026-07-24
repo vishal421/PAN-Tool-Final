@@ -263,7 +263,7 @@ button, a, input, select, .card, .sidebar-item, .stat-tile, .chip-btn, .tab-btn 
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 44px;
+  height: 54px;
   border-bottom: 1px solid var(--sidebar-border);
   background: none;
   border-left: none;
